@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pyramid Concentration</title>
+<script src="http://ajax.aspnetcdn.com/ajax/jQuery/jquery-1.7.2.min.js"></script>
+<script src="js/enchant.min.js"></script>
+<script src="js/nineleap.enchant.js"></script>
+<script>
+	// ゲーム定数
+	var LENGTH = 9;
+	var LENGTH_X = 3;
+	var CARD_X = 0;
+	var CARD_Y = 40;
+	var CARD_WIDTH = 64;
+	var CARD_HEIGHT = 64;
+	var DEFAULT_ADD_SCORE = 100;
+	var DEFAULT_NG_SCORE = 20;
+	var BASE_TIME = 300;
+	// カード選択定数
+	var IMAGE_CARD_FRONT = 0;
+	var IMAGE_CARD_OK = 1;
+	var IMAGE_CARD_NG = 2;
+	var IMAGE_CARD_BACK = 3;
+
+	// ゲーム用オブジェクト
+	var game = null;
+	var score = 0;
+	var time = 0;
+	var timecount = 0;
+	var isClick = true;
+	var openCards = new Array();
+	var oldOpenedCards = new Array();
+	var stageNumber = 0;
+	var createdCardCount = 0;
+
+	/**
+	 * カードシャッフル
+	 */
+	Array.prototype.shuffle = function() {
+		var i = this.length;
+		while (i) {
+			var j = Math.floor(Math.random() * i);
+			var t = this[--i];
+			this[i] = this[j];
+			this[j] = t;
+		}
+		return this;
+	}
+
+	/**
+	 * カードクラス
+	 */
+	var Card = enchant.Class.create(enchant.Sprite, {
+		initialize : function(id, number) {
+			enchant.Sprite.call(this, CARD_WIDTH, CARD_HEIGHT);
+			this.image = game.assets['images/cards2.png'];
+			this._open = true;
+			this._id = id;
+			this._number = number;
+			this.addEventListener(Event.TOUCH_END, function() {
+				if (!this._open) {
+					return;
+				}
+				if (isClick) {
+					isClick = false;
+					console.log(this.toString());
+					game.assets['sounds/click.wav'].play();
+					this.displayFront();
+					openCards.push(this);
+					judgement(this);
+				}
+			});
+		},
+		show : function(x, y) {
+			this.x = x;
+			this.y = y;
+			this.displayBack();
+			game.rootScene.addChild(this);
+		},
+		displayFront : function() {
+			this._open = false;
+			this.frame = (this._number - 1) * 4 + IMAGE_CARD_FRONT;
+		},
+		displayOk : function() {
+			this._open = false;
+			this.frame = (this._number - 1) * 4 + IMAGE_CARD_OK;
+		},
+		displayNg : function() {
+			this._open = false;
+			this.frame = (this._number - 1) * 4 + IMAGE_CARD_NG;
+		},
+		displayBack : function() {
+			this._open = true;
+			this.frame = (this._number - 1) * 4 + IMAGE_CARD_BACK;
+		},
+		upScore : function(okNumber) {
+			var addScore = DEFAULT_ADD_SCORE;
+			if(0 >= oldOpenedCards.length) {
+				addScore *= okNumber;
+			}
+			score += addScore;
+		},
+		toString : function() {
+			return 'id:' + this._id + ', number:' + this._number;
+		}
+	});
+
+	function deleteArray(number, cards) {
+		var deleted = false;
+		for ( var i = 0; i < cards.length; ++i) {
+			if (number == cards[i]._number) {
+				game.rootScene.removeChild(cards[i]);
+				cards.splice(i, 1);
+				deleted = true;
+				break;
+			}
+		}
+		if (deleted) {
+			return deleteArray(number, cards);
+		}
+		return deleted;
+	}
+
+	/**
+	 * 正誤の判断を行う
+	 */
+	function judgement(selectedCard) {
+		var isDifferent = false;
+		var theNumber = openCards[0]._number;
+		var judgementCards = new Array();
+		for ( var i = 0; i < oldOpenedCards.length; ++i) {
+			var card = oldOpenedCards[i];
+			if (theNumber == card._number) {
+				judgementCards.push(card);
+			}
+		}
+		for ( var i = 0; i < openCards.length; ++i) {
+			judgementCards.push(openCards[i]);
+		}
+		for ( var i = 0; i < judgementCards.length; ++i) {
+			var card = judgementCards[i];
+			if (theNumber != card._number) {
+				isDifferent = true;
+				break;
+			}
+		}
+		if (isDifferent) {
+			selectedCard.displayNg();
+			score -= DEFAULT_NG_SCORE;
+			game.assets['sounds/ng.wav'].play();
+			var timerId = setTimeout(function() {
+				for ( var i = 0; i < openCards.length; ++i) {
+					var openCard = openCards[i];
+					if (stageNumber < openCard._number
+							&& selectedCard._id != openCard._id) {
+						oldOpenedCards.push(openCard);
+					} else {
+						openCard.displayBack();
+					}
+				}
+				openCards = new Array();
+				for ( var i = 0; i < oldOpenedCards.length; ++i) {
+					var openCard = oldOpenedCards[i];
+					openCard.displayFront();
+				}
+				selectedCard.displayBack();
+				isClick = true;
+				clearTimeout(timerId);
+			}, 1000);
+		} else {
+			var okNumber = 0;
+			for ( var i = 0; i < judgementCards.length; ++i) {
+				if (theNumber == judgementCards[i]._number) {
+					++okNumber;
+				}
+			}
+			if (theNumber == okNumber) {
+				selectedCard.upScore(okNumber);
+				createdCardCount -= okNumber;
+				console.log('ato ' + createdCardCount);
+				game.assets['sounds/ok.wav'].play();
+				for ( var i = 0; i < openCards.length; ++i) {
+					openCards[i].displayOk();
+				}
+				for ( var i = 0; i < oldOpenedCards.length; ++i) {
+					if (okNumber == oldOpenedCards[i]._number) {
+						oldOpenedCards[i].displayOk();
+					}
+				}
+				var timerId = setTimeout(function() {
+					for ( var i = 0; i < openCards.length; ++i) {
+						game.rootScene.removeChild(openCards[i]);
+					}
+					deleteArray(okNumber, oldOpenedCards);
+					openCards = new Array();
+					isClick = true;
+					if (0 >= createdCardCount) {
+						startStage();
+					}
+					clearTimeout(timerId);
+				}, 1000);
+			} else {
+				isClick = true;
+			}
+		}
+	}
+
+	/**
+	 * カードをシャッフルし、表示する
+	 */
+	function calcPosition(cards) {
+		cards.shuffle();
+		var top = (LENGTH - LENGTH_X) * CARD_WIDTH;
+		var x = CARD_X;
+		var y = CARD_Y + top;
+		var count = 1;
+		while (LENGTH_X >= count) {
+			for ( var i = 0; i < count; ++i) {
+				cards[createdCardCount].show(x, y);
+				x += CARD_WIDTH;
+				++createdCardCount;
+			}
+			x = 0;
+			y += CARD_HEIGHT;
+			++count;
+		}
+		++LENGTH_X;
+		console.log('created cards is ' + createdCardCount);
+	}
+
+	function addTimer() {
+		var timer = new Label();
+		timer.x = 200;
+		timer.y = 4;
+		timer.color = "#fff";
+		timer.font = "28px cursive";
+		timer.text = 'TIME : 0';
+		timer.addEventListener(Event.ENTER_FRAME, function() {
+			++timecount;
+			var t = (time - Math.floor(timecount / game.fps));
+			if(0 > t) {
+				console.log('timeOver.');
+				endGame();
+			}
+			this.text = 'TIME : ' + t;
+		});
+		game.rootScene.addChild(timer);
+	}
+
+	function addScore() {
+		var scoreLabel = new Label();
+		scoreLabel.x = 4;
+		scoreLabel.y = 4;
+		scoreLabel.color = "#fff";
+		scoreLabel.font = "28px cursive";
+		scoreLabel.text = 'SCORE : 0';
+		scoreLabel.addEventListener(Event.ENTER_FRAME, function() {
+			this.text = 'SCORE : ' + score;
+		});
+		game.rootScene.addChild(scoreLabel);
+	}
+
+	function startStage() {
+		if(0 < stageNumber) {
+			var t = (time - Math.floor(timecount / game.fps));
+			score += t;
+		}
+		++stageNumber;
+		if(LENGTH < stageNumber) {
+			console.log('stageOver.');
+			endGame();
+		}
+		timecount = 0;
+		time = (LENGTH_X - stageNumber + 1) * BASE_TIME;
+		var cards = new Array();
+		var id = 0;
+		for ( var i = 1; i <= LENGTH_X; ++i) {
+			for ( var j = 0; j < i; ++j) {
+				var card = new Card(id++, i);
+				cards.push(card);
+			}
+		}
+		calcPosition(cards);
+	}
+
+	function endGame() {
+		game.stop(score, 'あなたのスコアは' + score + '点です');
+	}
+	
+	/**
+	 * main
+	 */
+	$(document).ready(function() {
+		console.log('start');
+
+		enchant();
+		game = new Game(640, 640);
+		game.preload('images/bg.jpg');
+		game.preload('images/cards2.png');
+		game.preload('sounds/click.wav');
+		game.preload('sounds/ng.wav');
+		game.preload('sounds/ok.wav');
+		game.scale = 0.5;
+
+		game.onload = function() {
+			console.log('game.onload');
+			
+			var bg = new Sprite(640, 640);
+			bg.image = game.assets['images/bg.jpg'];
+			game.rootScene.addChild(bg);
+			
+			addTimer();
+			addScore();
+			startStage();
+		};
+		console.log('do start');
+		game.start();
+	});
+</script>
+</head>
+<body>
+
+</body>
+</html>
