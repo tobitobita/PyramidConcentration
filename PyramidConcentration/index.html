@@ -2,7 +2,6 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pyramid Concentration</title>
 <script src="http://ajax.aspnetcdn.com/ajax/jQuery/jquery-1.7.2.min.js"></script>
 <script src="js/enchant.min.js"></script>
@@ -15,20 +14,22 @@
 	var CARD_Y = 40;
 	var CARD_WIDTH = 64;
 	var CARD_HEIGHT = 64;
+	var CARD_HEIGHT = 64;
 	var DEFAULT_ADD_SCORE = 100;
-	var DEFAULT_NG_SCORE = 20;
-	var BASE_TIME = 300;
+	var DEFAULT_OK_TIME = 10;
+	var DEFAULT_NG_TIME = 5;
+	var BASE_TIME = 10;
 	// カード選択定数
 	var IMAGE_CARD_FRONT = 0;
 	var IMAGE_CARD_OK = 1;
 	var IMAGE_CARD_NG = 2;
 	var IMAGE_CARD_BACK = 3;
-
 	// ゲーム用オブジェクト
 	var game = null;
 	var score = 0;
 	var time = 0;
 	var timecount = 0;
+	var addTime = 0;
 	var isClick = true;
 	var openCards = new Array();
 	var oldOpenedCards = new Array();
@@ -147,28 +148,31 @@
 			}
 		}
 		if (isDifferent) {
-			selectedCard.displayNg();
-			score -= DEFAULT_NG_SCORE;
-			game.assets['sounds/ng.wav'].play();
-			var timerId = setTimeout(function() {
-				for ( var i = 0; i < openCards.length; ++i) {
-					var openCard = openCards[i];
-					if (stageNumber < openCard._number
-							&& selectedCard._id != openCard._id) {
-						oldOpenedCards.push(openCard);
-					} else {
-						openCard.displayBack();
+			var tmid = setTimeout(function() {
+				game.assets['sounds/ng.wav'].play();
+				selectedCard.displayNg();
+				time -= DEFAULT_NG_TIME;
+				var timerId = setTimeout(function() {
+					for ( var i = 0; i < openCards.length; ++i) {
+						var openCard = openCards[i];
+						if (stageNumber < openCard._number
+								&& selectedCard._id != openCard._id) {
+							oldOpenedCards.push(openCard);
+						} else {
+							openCard.displayBack();
+						}
 					}
-				}
-				openCards = new Array();
-				for ( var i = 0; i < oldOpenedCards.length; ++i) {
-					var openCard = oldOpenedCards[i];
-					openCard.displayFront();
-				}
-				selectedCard.displayBack();
-				isClick = true;
-				clearTimeout(timerId);
-			}, 1000);
+					openCards = new Array();
+					for ( var i = 0; i < oldOpenedCards.length; ++i) {
+						var openCard = oldOpenedCards[i];
+						openCard.displayFront();
+					}
+					selectedCard.displayBack();
+					isClick = true;
+					clearTimeout(timerId);
+				}, 1000);
+				clearTimeout(tmid);
+			}, 600);
 		} else {
 			var okNumber = 0;
 			for ( var i = 0; i < judgementCards.length; ++i) {
@@ -177,10 +181,12 @@
 				}
 			}
 			if (theNumber == okNumber) {
-				selectedCard.upScore(okNumber);
-				createdCardCount -= okNumber;
-				console.log('ato ' + createdCardCount);
 				game.assets['sounds/ok.wav'].play();
+				selectedCard.upScore(okNumber);
+				time += DEFAULT_OK_TIME;
+				createdCardCount -= okNumber;
+				addTime = okNumber;
+				console.log('ato ' + createdCardCount);
 				for ( var i = 0; i < openCards.length; ++i) {
 					openCards[i].displayOk();
 				}
@@ -208,6 +214,52 @@
 	}
 
 	/**
+	 * ゲームスタートからの時間を返す
+	 */
+	function currentTime() {
+		return time - Math.floor(timecount / game.fps);
+	}
+
+	/**
+	 * 残りタイム
+	 */
+	function showTimerLabel() {
+		var timer = new Label();
+		timer.x = 200;
+		timer.y = 4;
+		timer.color = "#fff";
+		timer.font = "28px cursive";
+		timer.text = 'TIME : 0';
+		timer.addEventListener(Event.ENTER_FRAME, function() {
+			++timecount;
+			var t = currentTime();
+			if(0 > t) {
+				console.log('timeOver.');
+				endGame('タイムオーバー あなたのスコアは' + score + '点です');
+			} else {
+				this.text = 'TIME : ' + t;				
+			}
+		});
+		game.rootScene.addChild(timer);
+	}
+
+	/**
+	 * 現在の得点
+	 */
+	function showScoreLabel() {
+		var scoreLabel = new Label();
+		scoreLabel.x = 4;
+		scoreLabel.y = 4;
+		scoreLabel.color = "#fff";
+		scoreLabel.font = "28px cursive";
+		scoreLabel.text = 'SCORE : 0';
+		scoreLabel.addEventListener(Event.ENTER_FRAME, function() {
+			this.text = 'SCORE : ' + score;
+		});
+		game.rootScene.addChild(scoreLabel);
+	}
+
+	/**
 	 * カードをシャッフルし、表示する
 	 */
 	function calcPosition(cards) {
@@ -226,54 +278,29 @@
 			y += CARD_HEIGHT;
 			++count;
 		}
-		++LENGTH_X;
 		console.log('created cards is ' + createdCardCount);
 	}
 
-	function addTimer() {
-		var timer = new Label();
-		timer.x = 200;
-		timer.y = 4;
-		timer.color = "#fff";
-		timer.font = "28px cursive";
-		timer.text = 'TIME : 0';
-		timer.addEventListener(Event.ENTER_FRAME, function() {
-			++timecount;
-			var t = (time - Math.floor(timecount / game.fps));
-			if(0 > t) {
-				console.log('timeOver.');
-				endGame();
-			}
-			this.text = 'TIME : ' + t;
-		});
-		game.rootScene.addChild(timer);
-	}
-
-	function addScore() {
-		var scoreLabel = new Label();
-		scoreLabel.x = 4;
-		scoreLabel.y = 4;
-		scoreLabel.color = "#fff";
-		scoreLabel.font = "28px cursive";
-		scoreLabel.text = 'SCORE : 0';
-		scoreLabel.addEventListener(Event.ENTER_FRAME, function() {
-			this.text = 'SCORE : ' + score;
-		});
-		game.rootScene.addChild(scoreLabel);
-	}
-
+	/**
+	 * 各面スタート
+	 */
 	function startStage() {
 		if(0 < stageNumber) {
-			var t = (time - Math.floor(timecount / game.fps));
+			// 残り時間を点数に加算する
+			var t = currentTime();
 			score += t;
+		} else {
+			time = 20;
 		}
 		++stageNumber;
-		if(LENGTH < stageNumber) {
+		console.log('LENGTH_X:' + LENGTH_X + ', ' + LENGTH);
+		if(Number(LENGTH) < Number(LENGTH_X)) {
 			console.log('stageOver.');
-			endGame();
+			endGame('おめでとう！ あなたのスコアは' + score + '点です');
+			return;
 		}
-		timecount = 0;
-		time = (LENGTH_X - stageNumber + 1) * BASE_TIME;
+		//time += addTime * BASE_TIME;
+		time += 3 * BASE_TIME;
 		var cards = new Array();
 		var id = 0;
 		for ( var i = 1; i <= LENGTH_X; ++i) {
@@ -283,10 +310,12 @@
 			}
 		}
 		calcPosition(cards);
+		++LENGTH_X;
 	}
 
-	function endGame() {
-		game.stop(score, 'あなたのスコアは' + score + '点です');
+	function endGame(str) {
+		console.log(str);
+		game.end(score, str);
 	}
 	
 	/**
@@ -311,8 +340,8 @@
 			bg.image = game.assets['images/bg.jpg'];
 			game.rootScene.addChild(bg);
 			
-			addTimer();
-			addScore();
+			showTimerLabel();
+			showScoreLabel();
 			startStage();
 		};
 		console.log('do start');
